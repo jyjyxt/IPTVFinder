@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Public IPTV Finder",
+  "version": "0.1.0",
+  "description": "Find HLS and video streams on a page, then preview them in your browser. Local only.",
+  "minimum_chrome_version": "116",
+  "homepage_url": "https://publiciptv.com/",
+  "permissions": [
+    "webRequest",
+    "storage",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Public IPTV Finder"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
+  }
+}

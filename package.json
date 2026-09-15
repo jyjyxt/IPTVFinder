@@ -1,0 +1,25 @@
+{
+  "name": "iptvfinder",
+  "version": "0.1.0",
+  "description": "Discover and play streams from the page you are watching.",
+  "scripts": {
+    "test": "node --test tests/unit.test.js",
+    "test:browser": "playwright test",
+    "vendor": "node scripts/vendor.js",
+    "package": "node scripts/package.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jyjyxt/IPTVFinder.git"
+  },
+  "keywords": [],
+  "author": "jyjyxt <im.jyjyxt@gmail.com>",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "hls.js": "1.7.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
