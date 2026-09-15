@@ -6,6 +6,20 @@ async function request(type,extra = {}) {
   if (result.error) throw new Error(result.error);
   return result.data;
 }
+function openPlayer(item) {
+  const params = new URLSearchParams({embedded:'1'});
+  if (item) { params.set('tab',tabId); params.set('id',item.id); }
+  $('player-frame').src = chrome.runtime.getURL(`player.html?${params}`);
+  $('inline-player').hidden = false;
+  document.querySelector('.capture-panel').hidden = document.querySelector('.results').hidden = true;
+  $('open-player').hidden = true;
+}
+$('back-to-streams').onclick = () => {
+  $('player-frame').removeAttribute('src');
+  $('inline-player').hidden = true;
+  document.querySelector('.capture-panel').hidden = document.querySelector('.results').hidden = false;
+  $('open-player').hidden = false;
+};
 function notify(text) { $('notice').textContent = text; }
 function action(handler) { return async () => { try { await handler(); } catch(error) { notify(error.message); } }; }
 function render() {
@@ -18,7 +32,7 @@ function render() {
   const filtered = state.streams.filter(item => (!kind || item.kind === kind) && `${item.name} ${item.url} ${item.pageTitle}`.toLowerCase().includes(query));
   $('streams').replaceChildren(); $('empty').hidden = filtered.length > 0;
   $('empty').querySelector('h3').textContent = state.streams.length ? 'No matching streams' : 'No streams yet';
-  $('empty').querySelector('p').textContent = state.streams.length ? 'Try another search or format.' : 'Start capture and press play on the website. Already playing? Reload the page to find its stream.';
+  $('empty').querySelector('p').textContent = state.streams.length ? 'Try another search or format.' : state.enabled ? 'Capture is automatic. Press play on the website. Already playing? Reload the page to find its stream.' : 'Capture is paused. Start capture and press play on the website.';
   for (const item of [...filtered].reverse()) {
     const card = document.createElement('article'); card.className = 'stream';
     const top = document.createElement('div'); top.className = 'stream-heading';
@@ -32,14 +46,14 @@ function render() {
     const copy = document.createElement('button'); copy.textContent = 'Copy';
     copy.onclick = action(async () => { await navigator.clipboard.writeText(item.url); notify('Stream URL copied.'); });
     const play = document.createElement('button'); play.className = 'primary small'; play.textContent = 'Play ▶';
-    play.onclick = action(async () => { await request('play',{id:item.id}); });
+    play.onclick = () => openPlayer(item);
     buttons.append(copy,play); bottom.append(origin,buttons); card.append(top,url,bottom); $('streams').append(card);
   }
 }
 $('toggle').onclick = action(async () => { state = await request('toggle',{enabled:!state.enabled}); render(); });
 $('reload').onclick = action(async () => { state = await request('toggle',{enabled:true}); await chrome.tabs.reload(tabId); render(); notify('Page reloading. Press play on the website.'); });
 $('clear').onclick = action(async () => { state = await request('clear'); render(); notify('Captured streams cleared.'); });
-$('open-player').onclick = action(() => chrome.tabs.create({url:chrome.runtime.getURL('player.html')}));
+$('open-player').onclick = () => openPlayer();
 $('search').oninput = $('kind').onchange = render;
 chrome.storage.onChanged.addListener((changes,area) => {
   if (area === 'session' && changes[`tab:${tabId}`]) { state = changes[`tab:${tabId}`].newValue || {enabled:false,streams:[]}; render(); }

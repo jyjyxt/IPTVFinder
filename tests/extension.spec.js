@@ -19,6 +19,7 @@ test.beforeAll(async () => {
       res.setHeader('Content-Type','text/html');
       res.end('<!doctype html><title>Public IPTV test channel</title><h1>Test channel</h1><button onclick="fetch(\'/master.m3u8\')">Start channel</button>'); return;
     }
+    if(url.pathname==='/auto') {res.setHeader('Content-Type','text/html');res.end('<title>Automatic capture</title><script>fetch("/master.m3u8?autoload=1")</script>');return;}
     if(url.pathname==='/iframe') {res.setHeader('Content-Type','text/html');res.end('<script>fetch("/low.m3u8?iframe=1")</script>');return;}
     if(url.pathname==='/denied.m3u8') {res.writeHead(403,{'Content-Type':'application/vnd.apple.mpegurl'});res.end('Forbidden');return;}
     if(url.pathname==='/gone.m3u8') {res.writeHead(404,{'Content-Type':'application/vnd.apple.mpegurl'});res.end('Gone');return;}
@@ -68,9 +69,7 @@ async function launch() {
 test('real capture UI, deduplication, filters, iframe, isolation, pause, restart and cleanup',async ({},testInfo) => {
   const app=await launch();const {source,popup,send,context,worker,sourceTab}=app;
   try {
-    await expect(popup.locator('#toggle')).toHaveText('Start capture');
-    await source.getByRole('button').click();expect((await send('get')).streams).toHaveLength(0);
-    await popup.locator('#toggle').click();await expect(popup.locator('#toggle')).toHaveText('Pause capture');
+    await expect(popup.locator('#toggle')).toHaveText('Pause capture');
     await source.getByRole('button').click();await expect(popup.locator('.stream')).toHaveCount(1);
     await source.getByRole('button').click();await expect(popup.locator('.stream')).toHaveCount(1);
     await source.evaluate(()=>Promise.all(['/manifest?token=a%2Bb','/clip.mp4','/low00.ts'].map(url=>fetch(url))));
@@ -85,8 +84,11 @@ test('real capture UI, deduplication, filters, iframe, isolation, pause, restart
     const other=await context.newPage();await other.goto(`${origin}/other`);await other.evaluate(()=>fetch('/high.m3u8?other=1'));
     expect((await send('get')).streams).toHaveLength(4);
     await popup.locator('#toggle').click();await source.evaluate(()=>fetch('/high.m3u8?paused=1'));expect((await send('get')).streams).toHaveLength(4);
+    await source.reload();expect((await send('get')).enabled).toBe(false);
+    await source.evaluate(()=>fetch('/high.m3u8?still-paused=1'));
+    expect((await send('get')).streams).toHaveLength(0);
     const cdp=await context.newCDPSession(source);await cdp.send('ServiceWorker.enable');await cdp.send('ServiceWorker.stopAllWorkers');
-    expect((await send('get')).streams).toHaveLength(4); // Wakes worker; session data survives.
+    expect((await send('get')).enabled).toBe(false); // Wakes worker; pause survives.
     await popup.locator('#clear').click();await expect(popup.locator('.stream')).toHaveCount(0);
     await popup.locator('#reload').click();await source.waitForLoadState('load');
     await source.getByRole('button').click();await expect(popup.locator('.stream')).toHaveCount(1);
@@ -98,16 +100,19 @@ test('real capture UI, deduplication, filters, iframe, isolation, pause, restart
 test('captured HLS actually decodes, quality switches, direct video and error recovery',async ({},testInfo) => {
   const app=await launch();const {source,popup,context,send}=app;
   try {
-    await popup.locator('#toggle').click();await source.getByRole('button').click();await expect(popup.locator('.stream')).toHaveCount(1);
-    const next=context.waitForEvent('page');await popup.getByRole('button',{name:'Play ▶',exact:true}).click();const player=await next;
-    const errors=[];player.on('pageerror',error=>errors.push(error.message));
-    await player.waitForLoadState();
+    await source.getByRole('button').click();await expect(popup.locator('.stream')).toHaveCount(1);
+    const pageCount=context.pages().length;
+    const errors=[];popup.on('pageerror',error=>errors.push(error.message));
+    await popup.getByRole('button',{name:'Play ▶',exact:true}).click();
+    const player=popup.frameLocator('#player-frame');
+    await expect(popup.locator('#inline-player')).toBeVisible();
+    expect(context.pages()).toHaveLength(pageCount);
     await expect.poll(()=>player.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThan(1);
     await expect.poll(()=>player.locator('video').evaluate(v=>v.videoWidth)).toBeGreaterThan(0);
     await expect(player.locator('#source')).toHaveAttribute('href',`${origin}/page`);
     await expect(player.locator('#quality option')).toHaveCount(3);
     await player.locator('#quality').selectOption('0');await expect.poll(()=>player.locator('video').evaluate(v=>v.videoWidth)).toBe(320);
-    await player.screenshot({path:testInfo.outputPath('player.png')});
+    await popup.screenshot({path:testInfo.outputPath('player.png')});
     // Playback requests must not feed back into source-page captures.
     expect((await send('get')).streams).toHaveLength(1);
     await player.locator('#url').fill(`${origin}/live.m3u8`);await player.getByRole('button',{name:'Load stream',exact:true}).click();
@@ -119,9 +124,25 @@ test('captured HLS actually decodes, quality switches, direct video and error re
     await player.locator('#retry').click();await expect(player.locator('#error')).toContainText('authorization');
     await player.locator('#url').fill(`${origin}/clip.mp4`);await player.getByRole('button',{name:'Load stream',exact:true}).click();
     await expect.poll(()=>player.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThan(1);await expect(player.locator('#error')).toBeHidden();
-    await player.setViewportSize({width:390,height:844});
-    expect(await player.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await player.screenshot({path:testInfo.outputPath('player-mobile.png')});
+    expect(await player.locator('body').evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await popup.locator('#back-to-streams').click();
+    await expect(popup.locator('#inline-player')).toBeHidden();
+    await expect(popup.locator('.stream')).toHaveCount(1);
+    await expect(popup.locator('#player-frame')).not.toHaveAttribute('src',/.+/);
+    await popup.locator('#open-player').click();
+    await expect(player.locator('#video-empty')).toBeVisible();
+    expect(context.pages()).toHaveLength(pageCount);
     expect(errors).toEqual([]);
+  } finally {await app.close();}
+});
+
+test('captures page-load requests without opening the popup',async () => {
+  const app=await launch();
+  try {
+    await app.popup.close();
+    const page=await app.context.newPage();
+    await page.goto(`${origin}/auto`);
+    const tabId=await app.worker.evaluate(async url=>(await chrome.tabs.query({url}))[0].id,`${origin}/auto`);
+    await expect.poll(()=>app.worker.evaluate(async id=>(await chrome.storage.session.get(`tab:${id}`))[`tab:${id}`]?.streams.map(s=>s.url),tabId)).toEqual([`${origin}/master.m3u8?autoload=1`]);
   } finally {await app.close();}
 });

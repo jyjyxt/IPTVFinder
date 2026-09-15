@@ -58,6 +58,7 @@ $('quality').onchange = () => { if (hls) hls.currentLevel = Number($('quality').
 $('copy').onclick = async () => { try { await navigator.clipboard.writeText(currentURL); status('Stream URL copied'); } catch { fail('Copy failed. Select and copy the address above.'); } };
 window.addEventListener('pagehide',() => { clearTimeout(watchdog); hls?.destroy(); });
 const params = new URLSearchParams(location.search);
+if (params.get('embedded') === '1') document.body.classList.add('embedded');
 if (params.has('tab') && params.has('id')) {
   try {
     const response = await chrome.runtime.sendMessage({type:'get',tabId:Number(params.get('tab'))});

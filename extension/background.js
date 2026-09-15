@@ -7,8 +7,15 @@ function serial(task) {
   return result;
 }
 const key = id => `tab:${id}`;
-const blank = () => ({enabled:false,streams:[]});
-async function read(id) { return (await chrome.storage.session.get(key(id)))[key(id)] || blank(); }
+const blank = (enabled = false) => ({enabled,streams:[]});
+async function read(id) {
+  const stored = (await chrome.storage.session.get(key(id)))[key(id)];
+  if (stored) return stored;
+  try {
+    const tab = await chrome.tabs.get(id);
+    return blank(Boolean(httpURL(tab.url)));
+  } catch { return blank(); }
+}
 async function save(id,state) {
   await chrome.storage.session.set({[key(id)]:state});
   try {
@@ -17,7 +24,7 @@ async function save(id,state) {
   } catch { /* Tab may have closed during capture. */ }
 }
 chrome.webRequest.onResponseStarted.addListener(details => {
-  if (details.tabId < 0 || details.method === 'OPTIONS') return;
+  if (details.tabId < 0 || details.method === 'OPTIONS' || details.initiator === `chrome-extension://${chrome.runtime.id}`) return;
   const mime = details.responseHeaders?.find(h => h.name.toLowerCase() === 'content-type')?.value || '';
   const kind = classify(details.url,mime);
   if (!kind) return;
@@ -37,8 +44,10 @@ chrome.webRequest.onResponseStarted.addListener(details => {
 chrome.webNavigation.onBeforeNavigate.addListener(details => {
   if (details.frameId !== 0) return;
   serial(async () => {
-    const state = await read(details.tabId);
-    if (!state.enabled && !state.streams.length) return;
+    const stored = (await chrome.storage.session.get(key(details.tabId)))[key(details.tabId)];
+    // Start before page scripts request media; preserve an explicit pause across navigation.
+    if (!stored && !httpURL(details.url)) return;
+    const state = stored || blank(true);
     await save(details.tabId,{...state,streams:[],since:details.timeStamp});
   });
 });
@@ -58,12 +67,6 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
         await save(id,state); return state;
       }
       case 'clear': state.streams = []; state.since = Date.now(); await save(id,state); return state;
-      case 'play': {
-        const stream = state.streams.find(item => item.id === message.id);
-        if (!stream) throw new Error('This stream was cleared. Capture it again.');
-        await chrome.tabs.create({url:chrome.runtime.getURL(`player.html?tab=${id}&id=${encodeURIComponent(stream.id)}`)});
-        return {ok:true};
-      }
       default: throw new Error('Unknown action.');
     }
   }).then(data => respond({data}),error => respond({error:error.message}));
