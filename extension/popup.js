@@ -13,12 +13,14 @@ function openPlayer(item) {
   $('inline-player').hidden = false;
   document.querySelector('.capture-panel').hidden = document.querySelector('.results').hidden = true;
   $('open-player').hidden = true;
+  $('back-to-streams').hidden = false;
 }
 $('back-to-streams').onclick = () => {
   $('player-frame').removeAttribute('src');
   $('inline-player').hidden = true;
   document.querySelector('.capture-panel').hidden = document.querySelector('.results').hidden = false;
   $('open-player').hidden = false;
+  $('back-to-streams').hidden = true;
 };
 function notify(text) { $('notice').textContent = text; }
 function action(handler) { return async () => { try { await handler(); } catch(error) { notify(error.message); } }; }

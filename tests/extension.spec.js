@@ -1,3 +1,4 @@
+import {storeScreenshot} from '../scripts/store-screenshot.js';
 import {test,expect,chromium} from '@playwright/test';
 import {createServer} from 'node:http';
 import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
@@ -81,6 +82,7 @@ test('real capture UI, deduplication, filters, iframe, isolation, pause, restart
     await expect(popup.locator('.stream')).toHaveCount(4);
     expect(await popup.locator('body').evaluate(el=>el.scrollHeight)).toBeLessThanOrEqual(600);
     await popup.locator('body').screenshot({path:testInfo.outputPath('finder.png')});
+    await storeScreenshot(popup,'01-discover','Find the stream.','Automatic capture as pages load. Search, filter and copy detected video URLs.');
     const other=await context.newPage();await other.goto(`${origin}/other`);await other.evaluate(()=>fetch('/high.m3u8?other=1'));
     expect((await send('get')).streams).toHaveLength(4);
     await popup.locator('#toggle').click();await source.evaluate(()=>fetch('/high.m3u8?paused=1'));expect((await send('get')).streams).toHaveLength(4);
@@ -113,6 +115,7 @@ test('captured HLS actually decodes, quality switches, direct video and error re
     await expect(player.locator('#quality option')).toHaveCount(3);
     await player.locator('#quality').selectOption('0');await expect.poll(()=>player.locator('video').evaluate(v=>v.videoWidth)).toBe(320);
     await popup.screenshot({path:testInfo.outputPath('player.png')});
+    await storeScreenshot(popup,'02-play','Play in the popup.','Preview a captured stream, choose a quality and return to your results.');
     // Playback requests must not feed back into source-page captures.
     expect((await send('get')).streams).toHaveLength(1);
     await player.locator('#url').fill(`${origin}/live.m3u8`);await player.getByRole('button',{name:'Load stream',exact:true}).click();

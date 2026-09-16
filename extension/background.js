@@ -3,7 +3,7 @@ import {classify,httpURL,mergeStream,streamName} from './core.js';
 let queue = Promise.resolve();
 function serial(task) {
   const result = queue.then(task);
-  queue = result.catch(error => console.warn('IPTV Finder:',error.message));
+  queue = result.catch(error => console.warn('PublicIPTV:',error.message));
   return result;
 }
 const key = id => `tab:${id}`;

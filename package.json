@@ -6,7 +6,8 @@
     "test": "node --test tests/unit.test.js",
     "test:browser": "playwright test",
     "vendor": "node scripts/vendor.js",
-    "package": "node scripts/package.js"
+    "package": "node scripts/package.js",
+    "store:assets": "node scripts/store-assets.js"
   },
   "repository": {
     "type": "git",
